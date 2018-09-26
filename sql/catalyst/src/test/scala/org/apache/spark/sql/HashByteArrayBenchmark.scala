@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import java.util.Random
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.expressions.{HiveHasher, XXH64}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.util.Benchmark
 
 /**
  * Synthetic benchmark for MurMurHash 3 and xxHash64.
@@ -36,7 +36,8 @@ object HashByteArrayBenchmark {
       bytes
     }
 
-    val benchmark = new Benchmark("Hash byte arrays with length " + length, iters * numArrays)
+    val benchmark =
+      new Benchmark("Hash byte arrays with length " + length, iters * numArrays.toLong)
     benchmark.addCase("Murmur3_x86_32") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iters) {

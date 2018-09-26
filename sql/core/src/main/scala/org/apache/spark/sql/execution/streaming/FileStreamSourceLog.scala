@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.FileStreamSource.FileEntry
 import org.apache.spark.sql.internal.SQLConf
 
 class FileStreamSourceLog(
-    metadataLogVersion: String,
+    metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
   extends CompactibleFileStreamLog[FileEntry](metadataLogVersion, sparkSession, path) {
@@ -78,7 +78,7 @@ class FileStreamSourceLog(
 
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, Array[FileEntry])] = {
     val startBatchId = startId.getOrElse(0L)
-    val endBatchId = getLatest().map(_._1).getOrElse(0L)
+    val endBatchId = endId.orElse(getLatest().map(_._1)).getOrElse(0L)
 
     val (existedBatches, removedBatches) = (startBatchId to endBatchId).map { id =>
       if (isCompactionBatch(id, compactInterval) && fileEntryCache.containsKey(id)) {
@@ -115,10 +115,13 @@ class FileStreamSourceLog(
       Map.empty[Long, Option[Array[FileEntry]]]
     }
 
-    (existedBatches ++ retrievedBatches).map(i => i._1 -> i._2.get).toArray.sortBy(_._1)
+    val batches =
+      (existedBatches ++ retrievedBatches).map(i => i._1 -> i._2.get).toArray.sortBy(_._1)
+    HDFSMetadataLog.verifyBatchIds(batches.map(_._1), startId, endId)
+    batches
   }
 }
 
 object FileStreamSourceLog {
-  val VERSION = "v1"
+  val VERSION = 1
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.BooleanType
 
 class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
@@ -36,17 +38,44 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
+        SimplifyConditionals,
         BooleanSimplification,
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string,
+    'e.boolean, 'f.boolean, 'g.boolean, 'h.boolean)
+
+  val testRelationWithData = LocalRelation.fromExternalRows(
+    testRelation.output, Seq(Row(1, 2, 3, "abc"))
+  )
+
+  val testNotNullableRelation = LocalRelation('a.int.notNull, 'b.int.notNull, 'c.int.notNull,
+    'd.string.notNull, 'e.boolean.notNull, 'f.boolean.notNull, 'g.boolean.notNull,
+    'h.boolean.notNull)
+
+  val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
+    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
+  )
+
+  private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {
+    val plan = testRelationWithData.where(input).analyze
+    val actual = Optimize.execute(plan)
+    comparePlans(actual, expected)
+  }
 
   private def checkCondition(input: Expression, expected: Expression): Unit = {
     val plan = testRelation.where(input).analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = testRelation.where(expected).analyze
     comparePlans(actual, correctAnswer)
+  }
+
+  private def checkConditionInNotNullableRelation(
+      input: Expression, expected: LogicalPlan): Unit = {
+    val plan = testNotNullableRelationWithData.where(input).analyze
+    val actual = Optimize.execute(plan)
+    comparePlans(actual, expected)
   }
 
   test("a && a => a") {
@@ -90,55 +119,55 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
   }
 
-  test("a && (!a || b)") {
-    checkCondition('a && (!'a || 'b ), 'a && 'b)
+  test("e && (!e || f)") {
+    checkCondition('e && (!'e || 'f ), 'e && 'f)
 
-    checkCondition('a && ('b || !'a ), 'a && 'b)
+    checkCondition('e && ('f || !'e ), 'e && 'f)
 
-    checkCondition((!'a || 'b ) && 'a, 'b && 'a)
+    checkCondition((!'e || 'f ) && 'e, 'f && 'e)
 
-    checkCondition(('b || !'a ) && 'a, 'b && 'a)
+    checkCondition(('f || !'e ) && 'e, 'f && 'e)
   }
 
-  test("a < 1 && (!(a < 1) || b)") {
-    checkCondition('a < 1 && (!('a < 1) || 'b), ('a < 1) && 'b)
-    checkCondition('a < 1 && ('b || !('a < 1)), ('a < 1) && 'b)
+  test("a < 1 && (!(a < 1) || f)") {
+    checkCondition('a < 1 && (!('a < 1) || 'f), ('a < 1) && 'f)
+    checkCondition('a < 1 && ('f || !('a < 1)), ('a < 1) && 'f)
 
-    checkCondition('a <= 1 && (!('a <= 1) || 'b), ('a <= 1) && 'b)
-    checkCondition('a <= 1 && ('b || !('a <= 1)), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && (!('a <= 1) || 'f), ('a <= 1) && 'f)
+    checkCondition('a <= 1 && ('f || !('a <= 1)), ('a <= 1) && 'f)
 
-    checkCondition('a > 1 && (!('a > 1) || 'b), ('a > 1) && 'b)
-    checkCondition('a > 1 && ('b || !('a > 1)), ('a > 1) && 'b)
+    checkCondition('a > 1 && (!('a > 1) || 'f), ('a > 1) && 'f)
+    checkCondition('a > 1 && ('f || !('a > 1)), ('a > 1) && 'f)
 
-    checkCondition('a >= 1 && (!('a >= 1) || 'b), ('a >= 1) && 'b)
-    checkCondition('a >= 1 && ('b || !('a >= 1)), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && (!('a >= 1) || 'f), ('a >= 1) && 'f)
+    checkCondition('a >= 1 && ('f || !('a >= 1)), ('a >= 1) && 'f)
   }
 
-  test("a < 1 && ((a >= 1) || b)") {
-    checkCondition('a < 1 && ('a >= 1 || 'b ), ('a < 1) && 'b)
-    checkCondition('a < 1 && ('b || 'a >= 1), ('a < 1) && 'b)
+  test("a < 1 && ((a >= 1) || f)") {
+    checkCondition('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
+    checkCondition('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
 
-    checkCondition('a <= 1 && ('a > 1 || 'b ), ('a <= 1) && 'b)
-    checkCondition('a <= 1 && ('b || 'a > 1), ('a <= 1) && 'b)
+    checkCondition('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
+    checkCondition('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
 
-    checkCondition('a > 1 && (('a <= 1) || 'b), ('a > 1) && 'b)
-    checkCondition('a > 1 && ('b || ('a <= 1)), ('a > 1) && 'b)
+    checkCondition('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)
+    checkCondition('a > 1 && ('f || ('a <= 1)), ('a > 1) && 'f)
 
-    checkCondition('a >= 1 && (('a < 1) || 'b), ('a >= 1) && 'b)
-    checkCondition('a >= 1 && ('b || ('a < 1)), ('a >= 1) && 'b)
+    checkCondition('a >= 1 && (('a < 1) || 'f), ('a >= 1) && 'f)
+    checkCondition('a >= 1 && ('f || ('a < 1)), ('a >= 1) && 'f)
   }
 
   test("DeMorgan's law") {
-    checkCondition(!('a && 'b), !'a || !'b)
+    checkCondition(!('e && 'f), !'e || !'f)
 
-    checkCondition(!('a || 'b), !'a && !'b)
+    checkCondition(!('e || 'f), !'e && !'f)
 
-    checkCondition(!(('a && 'b) || ('c && 'd)), (!'a || !'b) && (!'c || !'d))
+    checkCondition(!(('e && 'f) || ('g && 'h)), (!'e || !'f) && (!'g || !'h))
 
-    checkCondition(!(('a || 'b) && ('c || 'd)), (!'a && !'b) || (!'c && !'d))
+    checkCondition(!(('e || 'f) && ('g || 'h)), (!'e && !'f) || (!'g && !'h))
   }
 
-  private val caseInsensitiveConf = new SimpleCatalystConf(false)
+  private val caseInsensitiveConf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> false)
   private val caseInsensitiveAnalyzer = new Analyzer(
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, caseInsensitiveConf),
     caseInsensitiveConf)
@@ -159,5 +188,33 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val expected = caseInsensitiveAnalyzer.execute(
       testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
+  }
+
+  test("Complementation Laws") {
+    checkConditionInNotNullableRelation('e && !'e, testNotNullableRelation)
+    checkConditionInNotNullableRelation(!'e && 'e, testNotNullableRelation)
+
+    checkConditionInNotNullableRelation('e || !'e, testNotNullableRelationWithData)
+    checkConditionInNotNullableRelation(!'e || 'e, testNotNullableRelationWithData)
+  }
+
+  test("Complementation Laws - null handling") {
+    checkCondition('e && !'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
+    checkCondition(!'e && 'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), false)).analyze)
+
+    checkCondition('e || !'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
+    checkCondition(!'e || 'e,
+      testRelationWithData.where(If('e.isNull, Literal.create(null, BooleanType), true)).analyze)
+  }
+
+  test("Complementation Laws - negative case") {
+    checkCondition('e && !'f, testRelationWithData.where('e && !'f).analyze)
+    checkCondition(!'f && 'e, testRelationWithData.where(!'f && 'e).analyze)
+
+    checkCondition('e || !'f, testRelationWithData.where('e || !'f).analyze)
+    checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
   }
 }

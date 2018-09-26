@@ -50,22 +50,27 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with 
   val utils = new PollingFlumeTestUtils
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     _sc = new SparkContext(conf)
   }
 
   override def afterAll(): Unit = {
-    if (_sc != null) {
-      _sc.stop()
-      _sc = null
+    try {
+      if (_sc != null) {
+        _sc.stop()
+        _sc = null
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
   test("flume polling test") {
-    testMultipleTimes(testFlumePolling)
+    testMultipleTimes(() => testFlumePolling())
   }
 
   test("flume polling test multiple hosts") {
-    testMultipleTimes(testFlumePollingMultipleHost)
+    testMultipleTimes(() => testFlumePollingMultipleHost())
   }
 
   /**

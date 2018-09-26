@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark for the previous interpreted hash function(InternalRow.hashCode) vs codegened
@@ -40,7 +40,7 @@ object HashBenchmark {
       safeProjection(encoder.toRow(generator().asInstanceOf[Row])).copy()
     ).toArray
 
-    val benchmark = new Benchmark("Hash For " + name, iters * numRows)
+    val benchmark = new Benchmark("Hash For " + name, iters * numRows.toLong)
     benchmark.addCase("interpreted version") { _: Int =>
       var sum = 0
       for (_ <- 0L until iters) {

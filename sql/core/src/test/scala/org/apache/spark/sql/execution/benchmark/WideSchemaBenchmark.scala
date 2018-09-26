@@ -22,8 +22,9 @@ import java.io.{File, FileOutputStream, OutputStream}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.functions._
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark for performance with very wide and nested DataFrames.
@@ -54,8 +55,11 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   override def afterAll() {
-    super.afterAll()
-    out.close()
+    try {
+      out.close()
+    } finally {
+      super.afterAll()
+    }
   }
 
   override def afterEach() {
@@ -140,7 +144,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
       }
       datum += "}"
       datum = s"""{"a": {"b": {"c": $datum, "d": $datum}, "e": $datum}}"""
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
+      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "a.b.c.value_1")
     }
@@ -157,7 +161,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
         datum = "{\"value\": " + datum + "}"
         selector = selector + ".value"
       }
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
+      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$depth deep x $numRows rows", selector)
     }
@@ -180,7 +184,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
       }
       // TODO(ekl) seems like the json parsing is actually the majority of the time, perhaps
       // we should benchmark that too separately.
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
+      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$numNodes x $depth deep x $numRows rows", selector)
     }
@@ -200,7 +204,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
         }
       }
       datum += "]}"
-      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
+      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum)).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "value[0]")
     }

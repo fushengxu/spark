@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark [[UnsafeProjection]] for fixed-length/primitive-type fields.
+ * Benchmark `UnsafeProjection` for fixed-length/primitive-type fields.
  */
 object UnsafeProjectionBenchmark {
 
@@ -38,7 +38,7 @@ object UnsafeProjectionBenchmark {
     val iters = 1024 * 16
     val numRows = 1024 * 16
 
-    val benchmark = new Benchmark("unsafe projection", iters * numRows)
+    val benchmark = new Benchmark("unsafe projection", iters * numRows.toLong)
 
 
     val schema1 = new StructType().add("l", LongType, false)
